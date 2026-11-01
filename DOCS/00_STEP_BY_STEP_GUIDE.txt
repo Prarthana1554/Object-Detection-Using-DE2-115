@@ -1,0 +1,110 @@
+=====================================================================
+  HARDWARE OBJECT DETECTION ON DE2-115  -  STEP-BY-STEP GUIDE
+  (everything runs inside the FPGA: no laptop program, no Ethernet)
+=====================================================================
+
+WHAT IT DOES
+  1. You show the FPGA each of your 10 objects once ("learn").
+     The FPGA measures the object and stores its signature in memory.
+  2. Then you put any of those objects in front of the camera
+     ("detect"). The FPGA compares it with the stored signatures and
+     shows the closest one on the VGA monitor:  BOTTLE 87%
+  The laptop is used ONLY to load the design into the board (Quartus).
+
+OBJECT NUMBERS (set with switches SW3..SW0)
+   0 PERSON     SW3..0 = 0000        5 MOUSE      = 0101
+   1 BOTTLE              0001        6 KEYBOARD   = 0110
+   2 MOBILE              0010        7 LAPTOP     = 0111
+   3 NOTEBOOK            0011        8 POUCH      = 1000
+   4 CUP                 0100        9 BAG        = 1001
+
+SWITCHES AND KEYS
+   SW14       UP = LEARN mode,  DOWN = DETECT mode
+   SW3..SW0   object number (learn mode)
+   SW4        sample A (down) / sample B (up): each object can be taught
+              twice, e.g. standing and lying, or front and side
+   SW13,SW12  sensitivity: 00 very sensitive ... 11 least sensitive
+              (start with SW13=0, SW12=1)
+   SW15       UP = hide the box (camera picture only)
+   KEY0       reset (also forgets everything learned)
+   KEY2       (learn mode) store the EMPTY background
+   KEY1       (learn mode) store the object in front of the camera
+   In DETECT mode KEY1/KEY2/SW0 work as in the original camera demo
+   (exposure / stop).
+
+LIGHTS AND DISPLAYS
+   LEDG0  background stored          LEDG1  object seen
+   LEDG2  flashes = object saved     LEDG3  object recognised
+   LEDG4  learn mode
+   LEDR0..LEDR9  which objects have been learned (LEDR1 = BOTTLE ...)
+   HEX7   A = learn mode, d = detect mode
+   HEX5   selected object number,  HEX4 = sample A(0)/B(1)
+   HEX2   recognised object number (F = none)
+   HEX1 HEX0  match score 0..99
+
+=====================================================================
+PART A - COMPILE (laptop, once)
+=====================================================================
+ 1. Extract DE2_115_HW_OBJECT_DETECT.zip  (right-click -> Extract All).
+ 2. Quartus -> File -> Open Project ->
+       DE2_115_HW_OBJECT_DETECT\FPGA\DE2_115_CAMERA.qpf
+ 3. Ctrl+L. Wait for "Full Compilation was successful".
+    Output: FPGA\output_files\DE2_115_CAMERA.sof
+
+=====================================================================
+PART B - SET UP THE BOARD
+=====================================================================
+ 1. Camera on the GPIO header, VGA monitor, USB-Blaster cable, power.
+    (No Ethernet cable needed. JP1 does not matter any more.)
+ 2. Put the camera on a stand pointing at a PLAIN background
+    (a wall, a table top, a sheet of chart paper). Do not move the
+    camera after this. Steady light, no window behind.
+ 3. All switches DOWN.
+ 4. Tools -> Programmer -> DE2_115_CAMERA.sof -> Start.
+ 5. You should see the live camera picture. HEX7 shows d.
+
+=====================================================================
+PART C - LEARN THE 10 OBJECTS (about 5 minutes)
+=====================================================================
+ 1. SW14 UP (learn mode). HEX7 shows A, LEDG4 on.
+ 2. Make sure NOTHING is in front of the camera (also keep your hands
+    out). Press KEY2.  -> LEDG0 turns on (background stored).
+ 3. Put the BOTTLE in front of the camera.
+    A box appears around it (label shows the selected name, 00%).
+    If the box is much bigger than the object (noise) set SW12 up
+    (less sensitive); if no box appears set SW12/SW13 down.
+ 4. Set SW3..SW0 = 0001 (BOTTLE), SW4 down. Keep hands out of view.
+    Press KEY1.  -> LEDG2 flashes, LEDR1 turns on.
+ 5. Optional: turn the bottle, SW4 UP, press KEY1 again (sample B).
+ 6. Repeat 3-5 for every object with its number (table above).
+    For PERSON (0): stand in front of the camera, ask a friend to press.
+ 7. When LEDR0..LEDR9 are all on, every object is learned.
+
+=====================================================================
+PART D - DETECT
+=====================================================================
+ 1. SW14 DOWN (detect mode). HEX7 shows d.
+ 2. Put any learned object in front of the camera (one at a time).
+    The monitor shows a box and its name with a score, e.g.
+         BOTTLE 87%
+    HEX2 shows its number, HEX1-HEX0 the score, LEDG3 is on.
+ 3. Move it around - the box follows.
+ 4. An object that was never learned (or too different) gets NO label.
+
+IF THE LIGHT CHANGES or the camera moves: SW14 up, take everything out,
+press KEY2 again (new background). Learned objects stay stored.
+KEY0 or power-off erases everything (signatures are kept in on-chip
+registers, not in flash).
+
+=====================================================================
+QUICK FIXES
+=====================================================================
+ No box at all ............ LEDG0 off? Store background (Part C step 2).
+                            Try SW13,SW12 = 00 (most sensitive).
+ Box covers whole screen .. background changed (light / camera moved):
+                            store background again. Or SW13,SW12 = 11.
+ Wrong name ............... teach that object again (same number),
+                            add sample B, keep the same distance.
+ Name never appears ....... the object is too different from what was
+                            learned: teach it again in this position.
+ Shadow of hand detected .. keep hands out; light from the front.

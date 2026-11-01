@@ -1,0 +1,34 @@
+# Quartus generated databases and compilation output
+**/db/
+**/incremental_db/
+**/output_files/
+**/greybox_tmp/
+**/simulation/modelsim/work/
+**/simulation/questa/work/
+*.qws
+*.qdf.bak
+*.qsf.bak
+*.qpf.bak
+*.rpt
+*.summary
+*.smsg
+*.jdi
+*.sof
+*.pof
+*.rbf
+*.map.log
+*.fit.log
+
+# Editor and operating-system files
+*~
+*.swp
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key

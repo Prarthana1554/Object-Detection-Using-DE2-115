@@ -1,0 +1,101 @@
+=====================================================================
+  HOW IT WORKS  (for the viva)
+=====================================================================
+
+ONE SENTENCE
+ "The FPGA separates the object from a stored background, measures its
+  colour and shape features in hardware, stores a signature for each
+  of the 10 objects in on-chip memory, and recognises an object by
+  finding the stored signature with the smallest difference."
+
+WHAT CHANGED FROM THE PREVIOUS VERSION
+ Before: the FPGA sent the picture over Ethernet and YOLO ran on the
+ laptop. Now: no laptop, no Ethernet, no Python. Detection is a Verilog
+ module, hw_object_detector.v, running at the 40 MHz pixel clock.
+
+DATA FLOW
+ D5M camera -> CCD_Capture -> RAW2RGB -> SDRAM -> VGA_Controller
+      (unchanged Terasic path: live 800x600 video)
+ VGA_Controller pixel + X,Y -> hw_object_detector -> video_overlay -> VGA
+                                  |   ^
+              background RAM (M9K)    signature memory (20 slots)
+
+THE FIVE STEPS (hw_object_detector.v)
+ 1. SAMPLING   Every 4th pixel of every 4th line: 200 x 150 = 30,000
+               samples per frame.
+ 2. BACKGROUND KEY2 in learn mode stores one empty frame in on-chip RAM:
+               30,000 samples x 18 bits (6 bits per colour), 64 M9K blocks.
+ 3. FOREGROUND For each sample:  diff = |R-Rb| + |G-Gb| + |B-Bb|
+               diff > threshold  ->  object pixel.
+               The box = smallest/largest X and Y of object pixels
+               (two neighbouring object pixels needed, to ignore noise).
+ 4. FEATURES   During the frame the hardware adds up, for object pixels:
+               count, sum of R, G, B, and an 8-colour histogram (black,
+               grey, white, red, yellow, green, blue, purple - decided
+               with comparisons only). In the blanking time after the
+               frame a sequential divider computes 15 one-byte features:
+                 f0-f2   mean R, G, B
+                 f3-f10  share of each colour class (x255)
+                 f11     size (pixel count / 128)
+                 f12-f13 box width, height
+                 f14     fill ratio = pixels / box area
+               = a 15-byte signature of the object.
+ 5. LEARN / MATCH
+               Learn: KEY1 copies the signature into slot
+               {sample, object number}: 10 objects x 2 = 20 slots
+               (20 x 120 bits of registers).
+               Detect: distance to every stored slot =
+                 sum |f_live - f_stored|  (colour histogram weighted x2)
+               The smallest distance wins. If it is above 700 the object
+               is "unknown" and nothing is drawn.
+               Score shown = 99 - distance/8 (a similarity score, not a
+               probability).
+
+TIMING
+ Steps 1-4 (accumulation) happen while the picture is being drawn,
+ one sample per clock when needed. The 12 divisions (24 clocks each)
+ and the 20 x 15 comparisons take about 650 clocks, done in the
+ vertical blanking interval (~28,000 clocks), so a new result is ready
+ every frame (60 per second).
+
+HARDWARE USED
+ Background RAM 32768 x 18 bit (64 M9K blocks). Signatures 2,400 bits
+ of registers. Accumulators, a restoring divider, an L1-distance unit
+ and a small state machine (START, LOAD, RUN, SAVE, STORE, MATCH, OUT).
+ Display: the same video_overlay (6-stage pipeline, label + font ROMs).
+
+WHY NOT A NEURAL NETWORK IN THE FPGA?
+ YOLOv4-Tiny needs ~7 billion arithmetic operations per image and 6 million
+ weights (23 MB). The Cyclone IV has 266 multipliers and ~0.5 MB of
+ on-chip RAM, so it cannot run in real time. A feature-signature
+ classifier fits easily and runs every frame.
+
+LIMITATIONS (say them before you are asked)
+ - One object at a time, plain fixed background, fixed camera.
+ - Lighting changes or shadows change the foreground -> store the
+   background again.
+ - Recognition uses colour and shape; two objects of the same colour
+   and shape (e.g. two black bags) can be confused. Teaching a second
+   sample (SW4) helps.
+ - Signatures are lost at power-off/KEY0 (stored in registers).
+ - Not a general detector: it recognises only the objects it was taught.
+
+VERIFICATION
+ Simulated in Icarus Verilog: 4 objects learned and then recognised
+ after moving them, making them smaller and changing their colour
+ (scores 89-99); an object that was never learned was rejected; an
+ empty scene gave no detection; full chain with VGA_Controller and the
+ overlay on a real photo background showed "BOTTLE 94%" after the
+ bottle was moved and scaled. Hardware test on the board: still to do.
+
+LIKELY QUESTIONS
+ Q: Where is the object stored?   A: Its 15-byte signature in registers
+    inside the FPGA (20 slots); the background in M9K block RAM.
+ Q: Why 4x4 sampling?   A: 30,000 samples are enough to find the object
+    and its colours, and the background fits in on-chip RAM.
+ Q: How do you divide in hardware?   A: A restoring divider: one quotient
+    bit per clock, 24 clocks per division, done in vertical blanking.
+ Q: What is the distance?   A: Sum of absolute differences of the 15
+    features (L1 / Manhattan distance); nearest neighbour wins.
+ Q: Why does the score drop when the object is further away?   A: size,
+    width and height features change; the colour features stay similar.
