@@ -2,6 +2,12 @@
 
 Verilog project for camera-based object recognition on the Terasic DE2-115 FPGA board. The design uses a D5M camera, background subtraction, colour and shape features, and nearest-neighbour signature matching. Results are drawn as a bounding box, class label, and similarity score on a VGA display.
 
+## Authors
+
+- Prarthana S
+- Alla Akanksha Lakshmi
+- Yashita Burla
+
 ## Hardware and tools
 
 - Terasic DE2-115 with Cyclone IV E `EP4CE115F29C7`
